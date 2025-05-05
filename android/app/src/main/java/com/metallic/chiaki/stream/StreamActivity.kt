@@ -46,6 +46,7 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 	private lateinit var binding: ActivityStreamBinding
 
 	private val uiVisibilityHandler = Handler()
+	private lateinit var preferences: Preferences
 
 	override fun onCreate(savedInstanceState: Bundle?)
 	{
@@ -67,6 +68,8 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 		binding = ActivityStreamBinding.inflate(layoutInflater)
 		setContentView(binding.root)
 		window.decorView.setOnSystemUiVisibilityChangeListener(this)
+
+		preferences = Preferences(this)
 
 		viewModel.onScreenControlsEnabled.observe(this, Observer {
 			if(binding.onScreenControlsSwitch.isChecked != it)
@@ -100,7 +103,7 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 		viewModel.session.state.observe(this, Observer { this.stateChanged(it) })
 		adjustStreamViewAspect()
 
-		if(Preferences(this).rumbleEnabled)
+		if(preferences.rumbleEnabled)
 		{
 			val vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
 			viewModel.session.rumbleState.observe(this, Observer {
@@ -169,6 +172,9 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 
 	private fun showOverlay()
 	{
+		if(preferences.disableOverlay)
+			return
+			
 		binding.overlay.isVisible = true
 		binding.overlay.animate()
 			.alpha(1.0f)

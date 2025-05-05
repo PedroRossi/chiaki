@@ -1,3 +1,4 @@
+Forked from https://git.sr.ht/~thestr4ng3r/chiaki
 
 ![Chiaki Logo](assets/chiaki_wide.png)
 

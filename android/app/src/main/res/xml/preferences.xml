@@ -76,6 +76,12 @@
             app:title="@string/preferences_codec_title"
             app:summary="%s"
             app:icon="@drawable/ic_codec"/>
+
+        <SwitchPreference
+            app:key="@string/preferences_disable_overlay_key"
+            app:title="@string/preferences_disable_overlay_title"
+            app:summary="@string/preferences_disable_overlay_summary"
+            app:icon="@drawable/ic_gamepad"/>
     </PreferenceCategory>
 
     <PreferenceCategory

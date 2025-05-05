@@ -88,6 +88,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(buttonHapticEnabledKey, true)
 		set(value) { sharedPreferences.edit().putBoolean(buttonHapticEnabledKey, value).apply() }
 
+	val disableOverlayKey get() = resources.getString(R.string.preferences_disable_overlay_key)
+	var disableOverlay
+		get() = sharedPreferences.getBoolean(disableOverlayKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(disableOverlayKey, value).apply() }
+
 	val logVerboseKey get() = resources.getString(R.string.preferences_log_verbose_key)
 	var logVerbose
 		get() = sharedPreferences.getBoolean(logVerboseKey, false)
