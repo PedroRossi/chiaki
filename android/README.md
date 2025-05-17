@@ -10,17 +10,27 @@ git submodule update --init --recursive
 # Build the base image with correct CLI tools and deps
 docker build -t chiaki-android-builder .
 # For the actual build process we need to mount from the root folder to use the CMakeLists.txt file
-docker run --rm \
+docker run --rm -it \
   -v $(pwd)/..:/app \
   chiaki-android-builder
+# Once inside docker run
+./gradlew clean
+./gradlew assembleRelease
+# Generate keystore.jks
+keytool -genkey -v -keystore keystore.jks -alias my-key-alias -keyalg RSA -keysize 2048 -validity 10000
+# Copy the apk to the root folder
+cp app/build/outputs/apk/release/app-release-unsigned.apk .
+# Align the apk for better ram usage
+zipalign -v -p 4 app-release-unsigned.apk app-release-unsigned-aligned.apk
+# Sign apk
+apksigner sign --ks keystore.jks --out app-release-signed.apk app-release-unsigned-aligned.apk
+# Verify that sign is ok
+apksigner verify app-release-signed.apk
 ```
 
 ## Build Output
 
-After a successful build, you can find the APK at:
-```
-app/build/outputs/apk/release/app-release.apk
-```
+After a successful build, you can find the APK in the root android folder with the name `app-release-signed.apk`.
 
 ## Troubleshooting
 

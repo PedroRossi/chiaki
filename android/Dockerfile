@@ -17,6 +17,8 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     protobuf-compiler \
     python3-protobuf \
+    zipalign \
+    apksigner \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and install Android SDK
@@ -41,8 +43,4 @@ RUN cd ${ANDROID_HOME}/cmdline-tools && \
 # Set working directory
 WORKDIR /app
 
-# Copy and set up the entrypoint script
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-ENTRYPOINT ["docker-entrypoint.sh"] 
+ENTRYPOINT ["bash"]
