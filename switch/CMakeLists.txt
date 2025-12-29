@@ -60,17 +60,16 @@ target_include_directories(borealis PUBLIC
 	borealis/library/lib/extern/fmt/include)
 
 find_package(glfw3 REQUIRED)
-find_library(EGL EGL)
-target_link_libraries(borealis PUBLIC
-	glfw
-	${EGL})
+target_link_libraries(borealis PUBLIC glfw)
 
 if(CHIAKI_IS_SWITCH)
 	target_compile_definitions(borealis PUBLIC
 		BOREALIS_RESOURCES="romfs:/")
-	find_library(GLAPI glapi)
-	find_library(DRM_NOUVEAU drm_nouveau)
-	target_link_libraries(borealis PUBLIC ${GLAPI} ${DRM_NOUVEAU})
+
+	# EGL is currently not part of /opt/devkitpro/portlibs/switch/lib/cmake/glfw3/glfw3Config.cmake
+	# but needed by glfw
+	find_package(OpenGL REQUIRED)
+	target_link_libraries(glfw INTERFACE OpenGL::EGL)
 else()
 	target_compile_definitions(borealis PUBLIC
 		BOREALIS_RESOURCES="./switch/res/")
