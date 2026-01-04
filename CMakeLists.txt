@@ -51,6 +51,7 @@ set(CHIAKI_IS_SWITCH ${NSWITCH})
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_CURRENT_SOURCE_DIR}/setsu/cmake")
 
 set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_C_STANDARD 11) # Should rather be 99, but aligned_alloc is currently in use
 
 if(CHIAKI_IS_SWITCH)
 	# force mbedtls as crypto lib
