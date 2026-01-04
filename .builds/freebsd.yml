@@ -7,6 +7,7 @@ sources:
 packages:
   - cmake
   - protobuf
+  - python3
   - py311-setuptools # should not be needed with nanopb >= 0.4.9
   - py311-protobuf
   - opus
