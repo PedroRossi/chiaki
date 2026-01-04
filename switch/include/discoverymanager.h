@@ -3,45 +3,43 @@
 #ifndef CHIAKI_DISCOVERYMANAGER_H
 #define CHIAKI_DISCOVERYMANAGER_H
 
-#include <map>
-#include <string>
-
 #include <chiaki/discoveryservice.h>
 #include <chiaki/log.h>
 
 #include "host.h"
-#include "settings.h"
 
-static void Discovery(ChiakiDiscoveryHost *, void *);
+#include <functional>
+
+class MainApplication;
 
 class DiscoveryManager
 {
+	friend class DiscoveryManagerPrivate;
+	public:
+		using Callback = std::function<void(const std::vector<DiscoveryHost> &hosts)>;
+
 	private:
-		Settings * settings = nullptr;
-		ChiakiLog * log = nullptr;
+		MainApplication *app;
+		ChiakiLog *log;
+		Callback cb;
 		ChiakiDiscoveryService service;
-		ChiakiDiscovery discovery;
-		struct sockaddr * host_addr = nullptr;
-		size_t host_addr_len = 0;
+		bool service_active;
+		std::vector<DiscoveryHost> hosts;
+
+		void TriggerCallback();
+		void DiscoveryServiceHosts(const std::vector<DiscoveryHost> &hosts);
+
 		uint32_t GetIPv4BroadcastAddr();
-		bool service_enable = false;
 
 	public:
-		typedef enum hoststate
-		{
-			UNKNOWN,
-			READY,
-			STANDBY,
-			SHUTDOWN,
-		} HostState;
-
-		DiscoveryManager();
+		DiscoveryManager(MainApplication *app, Callback cb);
 		~DiscoveryManager();
-		void SetService(bool);
-		int Send();
-		int Send(struct sockaddr * host_addr, size_t host_addr_len);
-		int Send(const char *);
-		void DiscoveryCB(ChiakiDiscoveryHost *);
+
+		void SetActive(bool active);
+
+		ChiakiErrorCode SendWakeup(const std::string &host, const char *regist_key /*[CHIAKI_SESSION_AUTH_SIZE]*/, bool ps5);
+
+		const std::vector<DiscoveryHost> &GetHosts() const { return hosts; }
 };
 
 #endif //CHIAKI_DISCOVERYMANAGER_H

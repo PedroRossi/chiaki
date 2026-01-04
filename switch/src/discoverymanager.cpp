@@ -11,47 +11,43 @@
 #include <string.h>
 
 #include <discoverymanager.h>
+#include <gui.h>
 
-#define PING_MS 500
-#define HOSTS_MAX 16
-#define DROP_PINGS 3
+#define PING_MS		500
+#define HOSTS_MAX	16
+#define DROP_PINGS	3
 
-static void Discovery(ChiakiDiscoveryHost *discovered_hosts, size_t hosts_count, void *user)
+static void DiscoveryServiceHostsCallback(ChiakiDiscoveryHost *hosts, size_t hosts_count, void *user);
+
+DiscoveryManager::DiscoveryManager(MainApplication *app, Callback cb) : app(app), log(app->GetLog()), cb(cb)
 {
-	DiscoveryManager *dm = (DiscoveryManager *)user;
-	for(size_t i = 0; i < hosts_count; i++)
-	{
-		dm->DiscoveryCB(discovered_hosts + i);
-	}
-}
-
-DiscoveryManager::DiscoveryManager()
-{
-	this->settings = Settings::GetInstance();
-	this->log = this->settings->GetLogger();
+	service_active = false;
 }
 
 DiscoveryManager::~DiscoveryManager()
 {
-	// join discovery thread
-	if(this->service_enable)
-		SetService(false);
+	if(service_active)
+		chiaki_discovery_service_fini(&service);
 }
 
-void DiscoveryManager::SetService(bool enable)
+void DiscoveryManager::TriggerCallback()
 {
-	if(this->service_enable == enable)
+	cb(hosts);
+}
+
+void DiscoveryManager::SetActive(bool active)
+{
+	if(service_active == active)
 		return;
+	service_active = active;
 
-	this->service_enable = enable;
-
-	if(enable)
+	if(active)
 	{
 		ChiakiDiscoveryServiceOptions options;
 		options.ping_ms = PING_MS;
 		options.hosts_max = HOSTS_MAX;
 		options.host_drop_pings = DROP_PINGS;
-		options.cb = Discovery;
+		options.cb = DiscoveryServiceHostsCallback;
 		options.cb_user = this;
 
 		sockaddr_in addr = {};
@@ -60,23 +56,27 @@ void DiscoveryManager::SetService(bool enable)
 		options.send_addr = reinterpret_cast<sockaddr *>(&addr);
 		options.send_addr_size = sizeof(addr);
 
-		ChiakiErrorCode err = chiaki_discovery_service_init(&this->service, &options, log);
+		ChiakiErrorCode err = chiaki_discovery_service_init(&service, &options, log);
 		if(err != CHIAKI_ERR_SUCCESS)
 		{
-			this->service_enable = false;
-			CHIAKI_LOGE(this->log, "DiscoveryManager failed to init Discovery Service");
+			service_active = false;
+			CHIAKI_LOGE(log, "DiscoveryManager failed to init Discovery Service");
 			return;
 		}
 	}
 	else
 	{
-		chiaki_discovery_service_fini(&this->service);
+		chiaki_discovery_service_fini(&service);
+		hosts = {};
+		TriggerCallback();
 	}
 }
 
 uint32_t DiscoveryManager::GetIPv4BroadcastAddr()
 {
 #ifdef __SWITCH__
+	// Switch will not send out a broadcast to the generic 255.255.255.255 IP.
+	// It needs to be the correct broadcast address for the subnet we are in.
 	uint32_t current_addr, subnet_mask;
 	// init nintendo net interface service
 	Result rc = nifmInitialize(NifmServiceType_User);
@@ -91,7 +91,7 @@ uint32_t DiscoveryManager::GetIPv4BroadcastAddr()
 	else
 	{
 		CHIAKI_LOGE(this->log, "Failed to get nintendo nifmGetCurrentIpConfigInfo");
-		return 1;
+		return 0xffffffff;
 	}
 	return current_addr | (~subnet_mask);
 #else
@@ -99,124 +99,80 @@ uint32_t DiscoveryManager::GetIPv4BroadcastAddr()
 #endif
 }
 
-int DiscoveryManager::Send(struct sockaddr *host_addr, size_t host_addr_len)
+ChiakiErrorCode DiscoveryManager::SendWakeup(const std::string &host, const char *regist_key /*[CHIAKI_SESSION_AUTH_SIZE]*/, bool ps5)
 {
-	if(!host_addr)
-	{
-		CHIAKI_LOGE(log, "Null sockaddr");
-		return 1;
-	}
-	ChiakiDiscoveryPacket packet;
-	memset(&packet, 0, sizeof(packet));
-	packet.cmd = CHIAKI_DISCOVERY_CMD_SRCH;
+	char key[CHIAKI_SESSION_AUTH_SIZE + 1];
+	memcpy(key, regist_key, CHIAKI_SESSION_AUTH_SIZE);
+	key[CHIAKI_SESSION_AUTH_SIZE] = 0;
 
-	chiaki_discovery_send(&this->discovery, &packet, this->host_addr, this->host_addr_len);
-	return 0;
+	char *endptr;
+	uint64_t credential = strtoull(key, &endptr, 16);
+	bool ok = strlen(key) <= 8 && *key && !*endptr;
+	if(!ok)
+	{
+		CHIAKI_LOGE(log, "DiscoveryManager got invalid regist key for wakeup");
+		return CHIAKI_ERR_INVALID_DATA;
+	}
+
+	ChiakiErrorCode err = chiaki_discovery_wakeup(log, service_active ? &service.discovery : nullptr, host.c_str(), credential, ps5);
+
+	if(err != CHIAKI_ERR_SUCCESS)
+		CHIAKI_LOGE(log, "DiscoveryManager failed to send packed: %s", chiaki_error_string(err));
+	return err;
 }
 
-int DiscoveryManager::Send(const char *discover_ip_dest)
+void DiscoveryManager::DiscoveryServiceHosts(const std::vector<DiscoveryHost> &hosts)
 {
-	struct addrinfo *host_addrinfos;
-	int r = getaddrinfo(discover_ip_dest, NULL, NULL, &host_addrinfos);
-	if(r != 0)
+	this->hosts = std::move(hosts);
+
+	for(const auto &host : this->hosts)
 	{
-		CHIAKI_LOGE(log, "getaddrinfo failed");
-		return 1;
+		CHIAKI_LOGI(this->log, "--");
+		CHIAKI_LOGI(this->log, "Discovered Host:");
+		CHIAKI_LOGI(this->log, "State:                             %s", chiaki_discovery_host_state_string(host.state));
+		CHIAKI_LOGI(this->log, "System Version:                    %s", host.system_version.c_str());
+		CHIAKI_LOGI(this->log, "Device Discovery Protocol Version: %s", host.device_discovery_protocol_version.c_str());
+		CHIAKI_LOGI(this->log, "Request Port:                      %hu", (unsigned short)host.host_request_port);
+		CHIAKI_LOGI(this->log, "Host Addr:                         %s", host.host_addr.c_str());
+		CHIAKI_LOGI(this->log, "Host Name:                         %s", host.host_name.c_str());
+		CHIAKI_LOGI(this->log, "Host Type:                         %s", host.host_type.c_str());
+		CHIAKI_LOGI(this->log, "Host ID:                           %s", host.host_id.c_str());
+		CHIAKI_LOGI(this->log, "Running App Title ID:              %s", host.running_app_titleid.c_str());
+		CHIAKI_LOGI(this->log, "Running App Name:                  %s", host.running_app_name.c_str());
+		CHIAKI_LOGI(this->log, "--");
 	}
 
-	struct sockaddr *host_addr = nullptr;
-	socklen_t host_addr_len = 0;
-
-	for(struct addrinfo *ai = host_addrinfos; ai; ai = ai->ai_next)
-	{
-		if(ai->ai_protocol != IPPROTO_UDP)
-			continue;
-		if(ai->ai_family != AF_INET) // TODO: IPv6
-			continue;
-
-		this->host_addr_len = ai->ai_addrlen;
-		this->host_addr = (struct sockaddr *)malloc(host_addr_len);
-		if(!this->host_addr)
-			break;
-		memcpy(this->host_addr, ai->ai_addr, this->host_addr_len);
-	}
-
-	freeaddrinfo(host_addrinfos);
-
-	if(!this->host_addr)
-	{
-		CHIAKI_LOGE(log, "Failed to get addr for hostname");
-		return 1;
-	}
-	return DiscoveryManager::Send(this->host_addr, this->host_addr_len);
+	TriggerCallback();
 }
 
-int DiscoveryManager::Send()
+class DiscoveryManagerPrivate
 {
-	struct sockaddr_in addr;
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = GetIPv4BroadcastAddr();
+	public:
+		static void DiscoveryServiceHosts(DiscoveryManager *discovery_manager, const std::vector<DiscoveryHost> &hosts)
+		{
+			discovery_manager->app->Post([discovery_manager, hosts]() {
+				discovery_manager->DiscoveryServiceHosts(hosts);
+			});
+		}
+};
 
-	this->host_addr_len = sizeof(sockaddr_in);
-	this->host_addr = (struct sockaddr *)malloc(host_addr_len);
-	memcpy(this->host_addr, &addr, this->host_addr_len);
-
-	return DiscoveryManager::Send(this->host_addr, this->host_addr_len);
-}
-
-void DiscoveryManager::DiscoveryCB(ChiakiDiscoveryHost *discovered_host)
+static void DiscoveryServiceHostsCallback(ChiakiDiscoveryHost *hosts, size_t hosts_count, void *user)
 {
-	// the user ptr is passed as
-	// chiaki_discovery_thread_start arg
+	std::vector<DiscoveryHost> hosts_list;
+	hosts_list.reserve(hosts_count);
 
-	std::string key = discovered_host->host_name;
-	Host *host = this->settings->GetOrCreateHost(&key);
-
-	CHIAKI_LOGI(this->log, "--");
-	CHIAKI_LOGI(this->log, "Discovered Host:");
-	CHIAKI_LOGI(this->log, "State:                             %s", chiaki_discovery_host_state_string(discovered_host->state));
-
-	host->state = discovered_host->state;
-	host->discovered = true;
-
-	// add host ptr to list
-	if(discovered_host->system_version && discovered_host->device_discovery_protocol_version)
+	for(size_t i=0; i<hosts_count; i++)
 	{
-		// example: 07020001
-		ChiakiTarget target = chiaki_discovery_host_system_version_target(discovered_host);
-		host->SetChiakiTarget(target);
-
-		CHIAKI_LOGI(this->log, "System Version:                    %s", discovered_host->system_version);
-		CHIAKI_LOGI(this->log, "Device Discovery Protocol Version: %s", discovered_host->device_discovery_protocol_version);
-		CHIAKI_LOGI(this->log, "PlayStation ChiakiTarget Version:  %d", target);
+		ChiakiDiscoveryHost *h = hosts + i;
+		DiscoveryHost o = {};
+		o.ps5 = chiaki_discovery_host_is_ps5(h);
+		o.state = h->state;
+		o.host_request_port = o.host_request_port;
+#define CONVERT_STRING(name) if(h->name) { o.name = h->name; }
+		CHIAKI_DISCOVERY_HOST_STRING_FOREACH(CONVERT_STRING)
+#undef CONVERT_STRING
+		hosts_list.push_back(o);
 	}
 
-	if(discovered_host->host_request_port)
-		CHIAKI_LOGI(this->log, "Request Port:                      %hu", (unsigned short)discovered_host->host_request_port);
-
-	if(discovered_host->host_addr)
-	{
-		host->host_addr = discovered_host->host_addr;
-		CHIAKI_LOGI(this->log, "Host Addr:                         %s", discovered_host->host_addr);
-	}
-
-	if(discovered_host->host_name)
-	{
-		host->host_name = discovered_host->host_name;
-		CHIAKI_LOGI(this->log, "Host Name:                         %s", discovered_host->host_name);
-	}
-
-	if(discovered_host->host_type)
-		CHIAKI_LOGI(this->log, "Host Type:                         %s", discovered_host->host_type);
-
-	if(discovered_host->host_id)
-		CHIAKI_LOGI(this->log, "Host ID:                           %s", discovered_host->host_id);
-
-	if(discovered_host->running_app_titleid)
-		CHIAKI_LOGI(this->log, "Running App Title ID:              %s", discovered_host->running_app_titleid);
-
-	if(discovered_host->running_app_name)
-		CHIAKI_LOGI(this->log, "Running App Name:                  %s", discovered_host->running_app_name);
-
-	CHIAKI_LOGI(this->log, "--");
+	DiscoveryManagerPrivate::DiscoveryServiceHosts(reinterpret_cast<DiscoveryManager *>(user), hosts_list);
 }

@@ -3,7 +3,7 @@
 #ifndef CHIAKI_SETTINGS_H
 #define CHIAKI_SETTINGS_H
 
-#include <regex>
+#include <map>
 
 #include <chiaki/log.h>
 #include "host.h"
@@ -19,48 +19,17 @@ class Settings
 		static Settings * instance;
 
 	private:
-		const char * filename = "chiaki.conf";
+		const char *filename = "chiaki.conf";
 		ChiakiLog log;
-		std::map<std::string, Host> hosts;
+		std::map<HostMAC, RegisteredHost> registered_hosts;
+		std::map<int, ManualHost> manual_hosts;
+		int manual_hosts_id_next = 0;
 
 		// global_settings from psedo INI file
 		ChiakiVideoResolutionPreset global_video_resolution = CHIAKI_VIDEO_RESOLUTION_PRESET_720p;
 		ChiakiVideoFPSPreset global_video_fps = CHIAKI_VIDEO_FPS_PRESET_60;
 		std::string global_psn_online_id = "";
 		std::string global_psn_account_id = "";
-
-		typedef enum configurationitem
-		{
-			UNKNOWN,
-			HOST_NAME,
-			HOST_ADDR,
-			PSN_ONLINE_ID,
-			PSN_ACCOUNT_ID,
-			RP_KEY,
-			RP_KEY_TYPE,
-			RP_REGIST_KEY,
-			VIDEO_RESOLUTION,
-			VIDEO_FPS,
-			TARGET,
-		} ConfigurationItem;
-
-		// dummy parser implementation
-		// the aim is not to have bulletproof parser
-		// the goal is to read/write inernal flat configuration file
-		const std::map<Settings::ConfigurationItem, std::regex> re_map = {
-			{HOST_NAME, std::regex("^\\[\\s*(.+)\\s*\\]")},
-			{HOST_ADDR, std::regex("^\\s*host_(?:ip|addr)\\s*=\\s*\"?([^\"]*)\"?")},
-			{PSN_ONLINE_ID, std::regex("^\\s*psn_online_id\\s*=\\s*\"?([\\w_-]+)\"?")},
-			{PSN_ACCOUNT_ID, std::regex("^\\s*psn_account_id\\s*=\\s*\"?([\\w/=+]+)\"?")},
-			{RP_KEY, std::regex("^\\s*rp_key\\s*=\\s*\"?([\\w/=+]+)\"?")},
-			{RP_KEY_TYPE, std::regex("^\\s*rp_key_type\\s*=\\s*\"?(\\d)\"?")},
-			{RP_REGIST_KEY, std::regex("^\\s*rp_regist_key\\s*=\\s*\"?([\\w/=+]+)\"?")},
-			{VIDEO_RESOLUTION, std::regex("^\\s*video_resolution\\s*=\\s*\"?(1080p|720p|540p|360p)\"?")},
-			{VIDEO_FPS, std::regex("^\\s*video_fps\\s*=\\s*\"?(60|30)\"?")},
-			{TARGET, std::regex("^\\s*target\\s*=\\s*\"?(\\d+)\"?")},
-		};
-
-		ConfigurationItem ParseLine(std::string * line, std::string * value);
 
 	public:
 		// singleton configuration
@@ -69,11 +38,18 @@ class Settings
 		static Settings * GetInstance();
 
 		ChiakiLog * GetLogger();
-		std::map<std::string, Host> * GetHostsMap();
-		Host * GetOrCreateHost(std::string * host_name);
+		void AddRegisteredHost(const RegisteredHost &host);
+		void AddManualHost(const ManualHost &host);
+
+		void DeleteManualHost(int id);
+
+		const std::map<HostMAC, RegisteredHost> &GetRegisteredHosts() const	{ return registered_hosts; }
+		const std::map<int, ManualHost> &GetManualHosts() const				{ return manual_hosts; }
+		bool GetRegisteredHostRegistered(const HostMAC &mac) const	{ return registered_hosts.find(mac) != registered_hosts.end(); }
+		RegisteredHost GetRegisteredHost(const HostMAC &mac) const	{ return registered_hosts.at(mac); }
 
 		void ParseFile();
-		int WriteFile();
+		void WriteFile();
 
 		std::string ResolutionPresetToString(ChiakiVideoResolutionPreset resolution);
 		int ResolutionPresetToInt(ChiakiVideoResolutionPreset resolution);
@@ -83,35 +59,19 @@ class Settings
 		int FPSPresetToInt(ChiakiVideoFPSPreset fps);
 		ChiakiVideoFPSPreset StringToFPSPreset(std::string value);
 
-		std::string GetHostName(Host * host);
-		std::string GetHostAddr(Host * host);
+		std::string GetPSNOnlineID();
+		void SetPSNOnlineID(std::string psn_online_id);
 
-		std::string GetPSNOnlineID(Host * host);
-		void SetPSNOnlineID(Host * host, std::string psn_online_id);
+		std::string GetPSNAccountID();
+		void SetPSNAccountID(std::string psn_account_id);
 
-		std::string GetPSNAccountID(Host * host);
-		void SetPSNAccountID(Host * host, std::string psn_account_id);
+		ChiakiVideoResolutionPreset GetVideoResolution();
+		void SetVideoResolution(ChiakiVideoResolutionPreset value);
+		void SetVideoResolution(std::string value);
 
-		ChiakiVideoResolutionPreset GetVideoResolution(Host * host);
-		void SetVideoResolution(Host * host, ChiakiVideoResolutionPreset value);
-		void SetVideoResolution(Host * host, std::string value);
-
-		ChiakiVideoFPSPreset GetVideoFPS(Host * host);
-		void SetVideoFPS(Host * host, ChiakiVideoFPSPreset value);
-		void SetVideoFPS(Host * host, std::string value);
-
-		ChiakiTarget GetChiakiTarget(Host * host);
-		bool SetChiakiTarget(Host * host, ChiakiTarget target);
-		bool SetChiakiTarget(Host * host, std::string value);
-
-		std::string GetHostRPKey(Host * host);
-		bool SetHostRPKey(Host * host, std::string rp_key_b64);
-
-		std::string GetHostRPRegistKey(Host * host);
-		bool SetHostRPRegistKey(Host * host, std::string rp_regist_key_b64);
-
-		int GetHostRPKeyType(Host * host);
-		bool SetHostRPKeyType(Host * host, std::string value);
+		ChiakiVideoFPSPreset GetVideoFPS();
+		void SetVideoFPS(ChiakiVideoFPSPreset value);
+		void SetVideoFPS(std::string value);
 };
 
 #endif // CHIAKI_SETTINGS_H

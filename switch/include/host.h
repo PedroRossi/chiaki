@@ -3,27 +3,18 @@
 #ifndef CHIAKI_HOST_H
 #define CHIAKI_HOST_H
 
-#include <netinet/in.h>
-#include <map>
-#include <string>
-
 #include <chiaki/controller.h>
 #include <chiaki/discovery.h>
 #include <chiaki/log.h>
 #include <chiaki/opusdecoder.h>
 #include <chiaki/regist.h>
 
-#include "exception.h"
-#include "io.h"
-#include "settings.h"
+#include <netinet/in.h>
+#include <string>
+#include <cstring>
 
 class DiscoveryManager;
-static void Discovery(ChiakiDiscoveryHost *, void *);
-static void InitAudioCB(unsigned int channels, unsigned int rate, void *user);
-static bool VideoCB(uint8_t *buf, size_t buf_size, void *user);
-static void AudioCB(int16_t *buf, size_t samples_count, void *user);
-static void EventCB(ChiakiEvent *event, void *user);
-static void RegistEventCB(ChiakiRegistEvent *event, void *user);
+class ConfigParser;
 
 enum RegistError
 {
@@ -34,94 +25,154 @@ enum RegistError
 
 class Settings;
 
-class Host
+class HostMAC
 {
 	private:
-		ChiakiLog *log = nullptr;
-		Settings *settings = nullptr;
-		//video config
-		ChiakiVideoResolutionPreset video_resolution = CHIAKI_VIDEO_RESOLUTION_PRESET_720p;
-		ChiakiVideoFPSPreset video_fps = CHIAKI_VIDEO_FPS_PRESET_60;
-		std::string host_type;
-		// user info
-		std::string psn_online_id = "";
-		std::string psn_account_id = "";
-		// info from regist/settings
-		ChiakiRegist regist = {};
-		ChiakiRegistInfo regist_info = {};
-		std::function<void()> chiaki_regist_event_type_finished_canceled = nullptr;
-		std::function<void()> chiaki_regist_event_type_finished_failed = nullptr;
-		std::function<void()> chiaki_regist_event_type_finished_success = nullptr;
-		std::function<void()> chiaki_event_connected_cb = nullptr;
-		std::function<void(bool)> chiaki_even_login_pin_request_cb = nullptr;
-		std::function<void(uint8_t, uint8_t)> chiaki_event_rumble_cb = nullptr;
-		std::function<void(ChiakiQuitEvent *)> chiaki_event_quit_cb = nullptr;
-		std::function<void(ChiakiControllerState *, std::map<uint32_t, int8_t> *)> io_read_controller_cb = nullptr;
+		uint8_t mac[6];
 
-		// internal state
-		bool discovered = false;
-		bool registered = false;
-		// rp_key_data is true when rp_key, rp_regist_key, rp_key_type
-		bool rp_key_data = false;
+	public:
+		HostMAC()								{ memset(mac, 0, sizeof(mac)); }
+		HostMAC(const HostMAC &o)				{ memcpy(mac, o.GetMAC(), sizeof(mac)); }
+		explicit HostMAC(const uint8_t mac[6])	{ memcpy(this->mac, mac, sizeof(this->mac)); }
+		const uint8_t *GetMAC() const			{ return mac; }
+		uint64_t GetValue() const
+		{
+			return ((uint64_t)mac[0] << 0x28)
+				| ((uint64_t)mac[1] << 0x20)
+				| ((uint64_t)mac[2] << 0x18)
+				| ((uint64_t)mac[3] << 0x10)
+				| ((uint64_t)mac[4] << 0x8)
+				| mac[5];
+		}
+		std::string ToString() const;
+		void Parse(const std::string &str, bool *ok);
+};
 
-		std::string host_name;
-		// sony's host_id == mac addr without colon
-		std::string host_id;
-		std::string host_addr;
+static bool operator==(const HostMAC &a, const HostMAC &b)	{ return memcmp(a.GetMAC(), b.GetMAC(), 6) == 0; }
+static bool operator<(const HostMAC &a, const HostMAC &b)	{ return a.GetValue() < b.GetValue(); }
+
+class RegisteredHost
+{
+	private:
+		ChiakiTarget target;
 		std::string ap_ssid;
 		std::string ap_bssid;
 		std::string ap_key;
 		std::string ap_name;
+		HostMAC server_mac;
 		std::string server_nickname;
-		ChiakiTarget target = CHIAKI_TARGET_PS4_UNKNOWN;
-		ChiakiDiscoveryHostState state = CHIAKI_DISCOVERY_HOST_STATE_UNKNOWN;
-		ChiakiControllerState controller_state = {0};
-		std::map<uint32_t, int8_t> finger_id_touch_id;
-
-		// mac address = 48 bits
-		uint8_t server_mac[6] = {0};
-		char rp_regist_key[CHIAKI_SESSION_AUTH_SIZE] = {0};
-		uint32_t rp_key_type = 0;
-		uint8_t rp_key[0x10] = {0};
-		// manage stream session
-		bool session_init = false;
-		ChiakiSession session;
-		ChiakiOpusDecoder opus_decoder;
-		ChiakiConnectVideoProfile video_profile;
-		friend class Settings;
-		friend class DiscoveryManager;
+		char rp_regist_key[CHIAKI_SESSION_AUTH_SIZE];
+		uint32_t rp_key_type;
+		uint8_t rp_key[0x10];
 
 	public:
-		Host(std::string host_name);
-		~Host();
-		int Register(int pin);
-		int Wakeup();
-		int InitSession(IO *);
-		int FiniSession();
-		void StopSession();
-		void StartSession();
-		void SendFeedbackState();
-		void RegistCB(ChiakiRegistEvent *);
-		void ConnectionEventCB(ChiakiEvent *);
-		bool GetVideoResolution(int *ret_width, int *ret_height);
-		std::string GetHostName();
-		std::string GetHostAddr();
-		ChiakiTarget GetChiakiTarget();
-		void SetChiakiTarget(ChiakiTarget target);
-		void SetHostAddr(std::string host_addr);
-		void SetRegistEventTypeFinishedCanceled(std::function<void()> chiaki_regist_event_type_finished_canceled);
-		void SetRegistEventTypeFinishedFailed(std::function<void()> chiaki_regist_event_type_finished_failed);
-		void SetRegistEventTypeFinishedSuccess(std::function<void()> chiaki_regist_event_type_finished_success);
-		void SetEventConnectedCallback(std::function<void()> chiaki_event_connected_cb);
-		void SetEventLoginPinRequestCallback(std::function<void(bool)> chiaki_even_login_pin_request_cb);
-		void SetEventRumbleCallback(std::function<void(uint8_t, uint8_t)> chiaki_event_rumble_cb);
-		void SetEventQuitCallback(std::function<void(ChiakiQuitEvent *)> chiaki_event_quit_cb);
-		void SetReadControllerCallback(std::function<void(ChiakiControllerState *, std::map<uint32_t, int8_t> *)> io_read_controller_cb);
-		bool IsRegistered();
-		bool IsDiscovered();
-		bool IsReady();
-		bool HasRPkey();
-		bool IsPS5();
+		RegisteredHost();
+		RegisteredHost(const RegisteredHost &o);
+
+		RegisteredHost(const ChiakiRegisteredHost &chiaki_host);
+
+		ChiakiTarget GetTarget() const					{ return target; }
+		const HostMAC &GetServerMAC() const 			{ return server_mac; }
+		const std::string &GetServerNickname() const	{ return server_nickname; }
+		void SaveToSettings(std::ostream &s) const;
+		static RegisteredHost LoadFromSettings(ChiakiLog *log, ConfigParser &p);
+		const char *GetRpRegistKey() const				{ return rp_regist_key; }
+		const uint8_t *GetRpKey() const					{ return rp_key; }
+};
+
+class ManualHost
+{
+	private:
+		int id;
+		std::string host;
+		bool registered;
+		HostMAC registered_mac;
+
+	public:
+		ManualHost();
+		ManualHost(int id, const std::string &host, bool registered, const HostMAC &registered_mac);
+		ManualHost(int id, const ManualHost &o);
+
+		int GetID() const 			{ return id; }
+		std::string GetHost() const	{ return host; }
+		bool GetRegistered() const	{ return registered; }
+		HostMAC GetMAC() const 		{ return registered_mac; }
+
+		void Register(const RegisteredHost &registered_host) { this->registered = true; this->registered_mac = registered_host.GetServerMAC(); }
+
+		void SaveToSettings(std::ostream &s) const;
+		static ManualHost LoadFromSettings(ChiakiLog *log, ConfigParser &p);
+};
+
+struct DiscoveryHost
+{
+	bool ps5;
+	ChiakiDiscoveryHostState state;
+	uint16_t host_request_port;
+#define STRING_MEMBER(name) std::string name;
+	CHIAKI_DISCOVERY_HOST_STRING_FOREACH(STRING_MEMBER)
+#undef STRING_MEMBER
+
+	HostMAC GetHostMAC() const;
+};
+
+struct DisplayServerID
+{
+	int manual_host_id;
+	std::string discovered_host_id;
+	bool discovered;
+};
+
+static bool operator==(const DisplayServerID &a, const DisplayServerID &b)
+{
+	if(a.discovered != b.discovered)
+		return false;
+	if(a.discovered)
+		return a.discovered_host_id == b.discovered_host_id;
+	return a.manual_host_id == b.manual_host_id;
+}
+
+static bool operator<(const DisplayServerID &a, const DisplayServerID &b)
+{
+	if(a.discovered != b.discovered)
+		return b.discovered;
+	if(a.discovered)
+		return a.discovered_host_id < b.discovered_host_id;
+	return a.manual_host_id < b.manual_host_id;
+}
+
+struct DisplayServer
+{
+	DiscoveryHost discovery_host;
+	ManualHost manual_host;
+	bool discovered;
+
+	RegisteredHost registered_host;
+	bool registered;
+
+	std::string GetHostAddr() const { return discovered ? discovery_host.host_addr : manual_host.GetHost(); }
+	bool IsPS5() const { return discovered ? discovery_host.ps5 :
+		(registered ? chiaki_target_is_ps5(registered_host.GetTarget()) : false); }
+
+	DisplayServerID GetID() const
+	{
+		DisplayServerID r = {};
+		r.discovered = discovered;
+		if(discovered)
+			r.discovered_host_id = discovery_host.host_id;
+		else
+			r.manual_host_id = manual_host.GetID();
+		return r;
+	}
+
+	std::string GetDisplayName() const
+	{
+		if(discovered)
+			return discovery_host.host_name;
+		return manual_host.GetHost();
+	}
+
+	ChiakiErrorCode Wakeup() const;
 };
 
 #endif

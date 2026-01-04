@@ -126,11 +126,10 @@ int main(int argc, char *argv[])
 	}
 
 	// build sdl OpenGl and AV decoders graphical interface
-	DiscoveryManager discoverymanager = DiscoveryManager();
 	{
 		// scope to delete MainApplication before SDL_Quit()
-		MainApplication app(&discoverymanager);
-		app.Load();
+		MainApplication app;
+		app.Run();
 	}
 
 	CHIAKI_LOGI(log, "Quit applet");

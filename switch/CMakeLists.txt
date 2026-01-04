@@ -86,12 +86,30 @@ find_library(SWRESAMPLE swresample)
 
 # find -type f | grep -P '\.(h|cpp)$' | sed 's#\./#\t\t#g'
 add_executable(chiaki-borealis WIN32
+	include/discoverymanager.h
 	src/discoverymanager.cpp
+	include/settings.h
 	src/settings.cpp
+	include/io.h
 	src/io.cpp
+	include/host.h
 	src/host.cpp
 	src/main.cpp
-	src/gui.cpp)
+	include/gui.h
+	src/gui.cpp
+	include/displayserverview.h
+	src/displayserverview.cpp
+	include/registdialog.h
+	src/registdialog.cpp
+	include/manualhostdialog.h
+	src/manualhostdialog.cpp
+	include/exception.h
+	src/base64.cpp
+	include/base64.h
+	src/configparser.cpp
+	include/configparser.h
+	src/streamsession.cpp
+	include/streamsession.h)
 
 set_target_properties(chiaki-borealis PROPERTIES
 	CXX_STANDARD 17

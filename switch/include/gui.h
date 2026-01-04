@@ -12,52 +12,54 @@
 #include <borealis.hpp>
 
 #include <map>
-#include <thread>
 
 #include "discoverymanager.h"
 #include "host.h"
 #include "io.h"
 #include "settings.h"
 
-class HostInterface : public brls::List
-{
-	private:
-		IO *io;
-		Host *host;
-		Settings *settings;
-		bool connected = false;
-
-	public:
-		HostInterface(Host *host);
-		~HostInterface();
-
-		static void Register(Host *host, std::function<void()> success_cb = nullptr);
-		void Register();
-		void Wakeup(brls::View *view);
-		void Connect(brls::View *view);
-		void ConnectSession();
-		void Disconnect();
-		void Stream();
-		void CloseStream(ChiakiQuitEvent *quit);
-};
+class DisplayServerView;
+class StreamSession;
+class PSRemotePlay;
 
 class MainApplication
 {
 	private:
 		Settings *settings;
 		ChiakiLog *log;
-		DiscoveryManager *discoverymanager;
+		DiscoveryManager *discovery_manager;
 		IO *io;
-		brls::TabFrame *rootFrame;
-		std::map<Host *, HostInterface *> host_menuitems;
 
-		bool BuildConfigurationMenu(brls::List *, Host *host = nullptr);
-		void BuildAddHostConfigurationMenu(brls::List *);
+		StreamSession *session;
+		PSRemotePlay *stream_view;
+
+		brls::TabFrame *tab_frame;
+		brls::SidebarItem *config_sidebar_item;
+		std::list<std::function<void()>> queue;
+
+		std::vector<DisplayServer> display_servers;
+		std::map<DisplayServerID, DisplayServerView *> server_views;
+		std::vector<DisplayServerView *> server_views_ordered;
+
+		bool BuildConfigurationMenu(brls::List *ls);
+		void UpdateDisplayServers();
+		void UpdateDisplayServerViews();
+
+		void Disconnect();
 
 	public:
-		MainApplication(DiscoveryManager *discoverymanager);
+		MainApplication();
 		~MainApplication();
-		bool Load();
+
+		bool Run();
+		void Post(std::function<void()> f);
+		ChiakiLog *GetLog() { return log; }
+		Settings *GetSettings() { return settings; }
+		DiscoveryManager *GetDiscoveryManager() { return discovery_manager; }
+
+		void HostsUpdated();
+
+		void Connect(const DisplayServer &server);
 };
 
 class PSRemotePlay : public brls::View
@@ -67,11 +69,13 @@ class PSRemotePlay : public brls::View
 		// to display stream on screen
 		IO *io;
 		// to send gamepad inputs
-		Host *host;
+		StreamSession *session;
 		brls::Label *label;
 	public:
-		PSRemotePlay(Host *host);
+		PSRemotePlay(StreamSession *session);
 		~PSRemotePlay();
+
+		void SessionClosed();
 
 		void draw(NVGcontext *vg, int x, int y, unsigned width, unsigned height, brls::Style *style, brls::FrameContext *ctx) override;
 };
