@@ -1,5 +1,5 @@
 
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.5)
 
 project(chiaki)
 
@@ -68,7 +68,7 @@ if(CHIAKI_USE_SYSTEM_JERASURE)
 	endif()
 endif()
 
-find_package(PythonInterp 3 REQUIRED) # Make sure nanopb doesn't find Python 2.7 because Python 2 should just die.
+find_package(Python 3 REQUIRED COMPONENTS Interpreter) # Make sure nanopb never finds Python 2.7
 
 if(CHIAKI_USE_SYSTEM_NANOPB)
 	if(CHIAKI_USE_SYSTEM_NANOPB STREQUAL AUTO)
