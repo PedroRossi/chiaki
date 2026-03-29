@@ -2,8 +2,10 @@
 
 package com.metallic.chiaki.common
 
+import android.app.UiModeManager
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import androidx.annotation.StringRes
 import androidx.preference.PreferenceManager
 import com.metallic.chiaki.R
@@ -48,6 +50,9 @@ class Preferences(context: Context)
 		val codecAll = Codec.values()
 	}
 
+	private val isTv: Boolean = (context.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager)
+		.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
+
 	private val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
 	private val sharedPreferenceChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
 		when(key)
@@ -65,7 +70,7 @@ class Preferences(context: Context)
 
 	val onScreenControlsEnabledKey get() = resources.getString(R.string.preferences_on_screen_controls_enabled_key)
 	var onScreenControlsEnabled
-		get() = sharedPreferences.getBoolean(onScreenControlsEnabledKey, true)
+		get() = sharedPreferences.getBoolean(onScreenControlsEnabledKey, !isTv)
 		set(value) { sharedPreferences.edit().putBoolean(onScreenControlsEnabledKey, value).apply() }
 
 	val touchpadOnlyEnabledKey get() = resources.getString(R.string.preferences_touchpad_only_enabled_key)
@@ -87,6 +92,11 @@ class Preferences(context: Context)
 	var buttonHapticEnabled
 		get() = sharedPreferences.getBoolean(buttonHapticEnabledKey, true)
 		set(value) { sharedPreferences.edit().putBoolean(buttonHapticEnabledKey, value).apply() }
+
+	val disableOverlayKey get() = resources.getString(R.string.preferences_disable_overlay_key)
+	var disableOverlay
+		get() = sharedPreferences.getBoolean(disableOverlayKey, isTv)
+		set(value) { sharedPreferences.edit().putBoolean(disableOverlayKey, value).apply() }
 
 	val logVerboseKey get() = resources.getString(R.string.preferences_log_verbose_key)
 	var logVerbose

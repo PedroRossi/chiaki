@@ -118,5 +118,10 @@
     <string name="preferences_resolution_key">stream_resolution</string>
     <string name="preferences_fps_key">stream_fps</string>
     <string name="preferences_bitrate_key">stream_bitrate</string>
-    <string name="preferences_codec_key">stream_codec</string>
+    <string name="preferences_codec_key">preferences_codec</string>
+    <string name="preferences_codec_summary">%s</string>
+
+    <string name="preferences_disable_overlay_key">preferences_disable_overlay</string>
+    <string name="preferences_disable_overlay_title">Disable Overlay</string>
+    <string name="preferences_disable_overlay_summary">Hide the overlay controls for a cleaner experience on Android TV</string>
 </resources>
